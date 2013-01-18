@@ -28,11 +28,11 @@ L<Catmandu::Introduction>.
 
 =head1 VERSION
 
-Version 0.0402
+Version 0.05
 
 =cut
 
-our $VERSION = '0.0402';
+our $VERSION = '0.05';
 
 =head1 SYNOPSIS
 
@@ -436,14 +436,19 @@ sub export_to_string {
     $str;
 }
 
+=head1 SEE ALSO
+
+L<Catmandu::Introduction>
 
 =head1 AUTHOR
 
 Nicolas Steenlant, C<< <nicolas.steenlant at ugent.be> >>
 
-=head1 SEE ALSO
+=head1 CONTRIBUTORS
 
-L<Catmandu::Introduction>
+Patrick Hochstenbach, C<< <patrick.hochstenbach at ugent.be> >>
+
+Christian Pietsch
 
 =head1 LICENSE AND COPYRIGHT
 
