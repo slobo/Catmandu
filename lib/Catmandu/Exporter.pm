@@ -27,6 +27,10 @@ after add => sub {
 
 sub encoding { ':utf8' }
 
+sub primary_attribute {
+    'file';
+}
+
 =head1 NAME
 
 Catmandu::Exporter - Namespace for packages that can export a hashref or an iterable object

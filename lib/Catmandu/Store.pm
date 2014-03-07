@@ -23,6 +23,8 @@ has bags => (
     default => sub { +{} },
 );
 
+sub primary_attribute {}
+
 {
     Hash::Util::FieldHash::fieldhash my %bag_instances;
 

@@ -39,6 +39,10 @@ sub default_encoding {
     ':utf8';
 }
 
+sub primary_attribute {
+    'file';
+}
+
 =head1 NAME
 
 Catmandu::Importer - Namespace for packages that can import

@@ -38,7 +38,7 @@ sub command {
     }
 
     my $from_bag = delete $from_opts->{bag};
-    my $from = Catmandu->store($from_args->[0], $from_opts)->bag($from_bag);
+    my $from = Catmandu->store($from_args, $from_opts)->bag($from_bag);
     if (defined $opts->query) {
         $from = $from->searcher(query => $opts->query);
     }
