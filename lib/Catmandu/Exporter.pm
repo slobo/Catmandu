@@ -9,6 +9,10 @@ with 'MooX::Log::Any';
 with 'Catmandu::Addable';
 with 'Catmandu::Counter';
 
+sub primary_attribute {
+    'file';
+}
+
 has file => (
     is      => 'ro',
     lazy    => 1,
@@ -26,10 +30,6 @@ after add => sub {
 };
 
 sub encoding { ':utf8' }
-
-sub primary_attribute {
-    'file';
-}
 
 =head1 NAME
 

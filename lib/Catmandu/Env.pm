@@ -4,6 +4,7 @@ use namespace::clean;
 use Catmandu::Sane;
 use Catmandu::Util qw(require_package use_lib read_yaml read_json :is :check);
 use Catmandu::Fix;
+use Clone qw(clone);
 use File::Spec;
 use Moo;
 
@@ -90,34 +91,6 @@ sub root {
     my ($self) = @_; $self->roots->[0];
 }
 
-sub store {
-    my $self = shift;
-    my $name = shift;
-
-    my $stores = $self->stores;
-
-    my $key = $name || $self->default_store;
-
-    $stores->{$key} || do {
-        my $ns = $self->store_namespace;
-        if (my $c = $self->config->{store}{$key}) {
-            check_hash_ref($c);
-            check_string(my $package = $c->{package});
-            my $opts = $c->{options} || {};
-            if (@_ > 1) {
-                $opts = {%$opts, @_};
-            } elsif (@_ == 1) {
-                $opts = {%$opts, %{$_[0]}};
-            }
-            return $stores->{$key} = require_package($package, $ns)->new($opts);
-        }
-        if ($name) {
-            return require_package($name, $ns)->new(@_);
-        }
-        Catmandu::BadArg->throw("unknown store ".$self->default_store);
-    }
-}
-
 sub fixer {
     my $self = shift;
     if (ref $_[0]) {
@@ -136,42 +109,132 @@ sub fixer {
     }
 }
 
+sub store {
+    my $self = shift;
+    my $name = shift;
+
+    my $key = $name // $self->default_store;
+
+    my $stores = $self->stores;
+
+    $stores->{$key} || do {
+        if (my $conf = $self->store_config($key)) {
+            my $pkg = $self->require_store($conf->{package});
+            my $attrs = { %{$conf->{options}}, %{$self->extract_options_for($pkg, @_)} };
+            return $stores->{$key} = $pkg->new($attrs);
+        }
+        unless (defined $name) {
+            Catmandu::BadArg->throw("unknown store '$key'");
+        }
+        my $pkg = $self->require_store($name);
+        my $attrs = $self->extract_options_for($pkg, @_);
+        $pkg->new($attrs);
+    };
+}
+
 sub importer {
     my $self = shift;
     my $name = shift;
-    my $ns = $self->importer_namespace;
-    if (my $c = $self->config->{importer}{$name || $self->default_importer}) {
-        check_hash_ref($c);
-        my $package = $c->{package} || $self->default_importer_package;
-        my $opts    = $c->{options} || {};
-        if (@_ > 1) {
-            $opts = {%$opts, @_};
-        } elsif (@_ == 1) {
-            $opts = {%$opts, %{$_[0]}};
-        }
-        return require_package($package, $ns)->new($opts);
+    if (my $conf = $self->importer_config($name)) {
+        my $pkg = $self->require_importer($conf->{package});
+        my $attrs = { %{$conf->{options}}, %{$self->extract_options_for($pkg, @_)} };
+        return $pkg->new($attrs);
     }
-    require_package($name ||
-        $self->default_importer_package, $ns)->new(@_);
+    my $pkg = $self->require_importer($name);
+    my $attrs = $self->extract_options_for($pkg, @_);
+    $pkg->new($attrs);
 }
 
 sub exporter {
     my $self = shift;
     my $name = shift;
-    my $ns = $self->exporter_namespace;
-    if (my $c = $self->config->{exporter}{$name || $self->default_exporter}) {
-        check_hash_ref($c);
-        my $package = $c->{package} || $self->default_exporter_package;
-        my $opts    = $c->{options} || {};
-        if (@_ > 1) {
-            $opts = {%$opts, @_};
-        } elsif (@_ == 1) {
-            $opts = {%$opts, %{$_[0]}};
-        }
-        return require_package($package, $ns)->new($opts);
+    if (my $conf = $self->exporter_config($name)) {
+        my $pkg = $self->require_exporter($conf->{package});
+        my $attrs = { %{$conf->{options}}, %{$self->extract_options_for($pkg, @_)} };
+        return $pkg->new($attrs);
     }
-    require_package($name ||
-        $self->default_exporter_package, $ns)->new(@_);
+    my $pkg = $self->require_exporter($name);
+    my $attrs = $self->extract_options_for($pkg, @_);
+    $pkg->new($attrs);
+}
+
+sub require_store {
+    my ($self, $pkg) = @_;
+    require_package($pkg, $self->store_namespace);
+}
+
+sub require_exporter {
+    my ($self, $pkg) = @_;
+    require_package($pkg || $self->default_exporter_package, $self->exporter_namespace);
+}
+
+sub require_importer {
+    my ($self, $pkg) = @_;
+    require_package($pkg || $self->default_importer_package, $self->importer_namespace);
+}
+
+sub store_config {
+    my ($self, $key) = @_;
+    my $config = $self->config;
+    $key //= $self->default_store;
+    return unless exists $config->{store}{$key};
+    check_hash_ref(my $conf = $config->{store}{$key});
+    $conf = clone($conf);
+    check_string($conf->{package});
+    check_hash_ref($conf->{options} //= {});
+    $conf;
+}
+
+sub exporter_config {
+    my ($self, $key) = @_;
+    my $config = $self->config;
+    $key //= $self->default_exporter;
+    return unless exists $config->{exporter}{$key};
+    check_hash_ref(my $conf = $config->{exporter}{$key});
+    $conf = clone($conf);
+    check_string($conf->{package} //= $self->default_exporter_package);
+    check_hash_ref($conf->{options} //= {});
+    $conf;
+}
+
+sub importer_config {
+    my ($self, $key) = @_;
+    my $config = $self->config;
+    $key //= $self->default_importer;
+    return unless exists $config->{importer}{$key};
+    check_hash_ref(my $conf = $config->{importer}{$key});
+    $conf = clone($conf);
+    check_string($conf->{package} //= $self->default_importer_package);
+    check_hash_ref($conf->{options} //= {});
+    $conf;
+}
+
+sub extract_options_for {
+    my $self = shift;
+    my $pkg  = shift;
+    my $opts;
+    if (@_) {
+        my $prim_opt = $pkg->primary_attribute;
+        my $prim_val;
+
+        if (ref $_[-1] eq 'HASH') {
+            $opts = pop;
+        }
+
+        if (@_ % 2 == 1) {
+            $prim_val = shift;
+        }
+        if (@_ && @_ % 2 == 0) {
+            $opts = {@_};
+        }
+        if (defined $prim_opt && defined $prim_val) {
+            $opts->{$prim_opt} = $prim_val;
+        }
+    } else {
+        $opts = {};
+    }
+
+    $opts;
 }
 
 1;

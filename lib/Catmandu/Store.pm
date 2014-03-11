@@ -8,6 +8,8 @@ use Moo::Role;
 
 with 'MooX::Log::Any';
 
+sub primary_attribute {}
+
 has bag_class => (
     is => 'ro',
     default => sub { ref($_[0]).'::Bag' },
@@ -22,8 +24,6 @@ has bags => (
     is => 'ro',
     default => sub { +{} },
 );
-
-sub primary_attribute {}
 
 {
     Hash::Util::FieldHash::fieldhash my %bag_instances;

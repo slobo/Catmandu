@@ -50,8 +50,8 @@ sub command {
 
     my $from_bag = delete $from_opts->{bag};
     my $into_bag = delete $into_opts->{bag};
-    my $from = Catmandu->store($from_args, $from_opts)->bag($from_bag);
-    my $into = Catmandu->store($into_args, $into_opts)->bag($into_bag);
+    my $from = Catmandu->store(@$from_args, $from_opts)->bag($from_bag);
+    my $into = Catmandu->store(@$into_args, $into_opts)->bag($into_bag);
     if (defined $opts->query) {
         $from = $from->searcher(query => $opts->query, total => $opts->limit);
     } elsif (defined $opts->limit) {

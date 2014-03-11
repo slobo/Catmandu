@@ -46,9 +46,9 @@ sub command {
         }
     }
 
-    my $from = Catmandu->importer($from_args, $from_opts);
+    my $from = Catmandu->importer(@$from_args, $from_opts);
     my $into_bag = delete $into_opts->{bag};
-    my $into = Catmandu->store($into_args, $into_opts)->bag($into_bag);
+    my $into = Catmandu->store(@$into_args, $into_opts)->bag($into_bag);
 
     $from = $from->benchmark if $opts->verbose;
     my $n = $into->add_many($from);

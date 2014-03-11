@@ -9,14 +9,9 @@ with 'MooX::Log::Any';
 with 'Catmandu::Iterable';
 with 'Catmandu::Fixable';
 
-around generator => sub {
-    my ($orig, $self) = @_;
-    my $generator = $orig->($self);
-    if (my $fixer = $self->_fixer) {
-        return $fixer->fix($generator);
-    }
-    $generator;
-};
+sub primary_attribute {
+    'file';
+}
 
 has file => (
     is      => 'ro',
@@ -39,9 +34,14 @@ sub default_encoding {
     ':utf8';
 }
 
-sub primary_attribute {
-    'file';
-}
+around generator => sub {
+    my ($orig, $self) = @_;
+    my $generator = $orig->($self);
+    if (my $fixer = $self->_fixer) {
+        return $fixer->fix($generator);
+    }
+    $generator;
+};
 
 =head1 NAME
 
