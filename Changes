@@ -1,5 +1,28 @@
 Revision history for Catmandu
 
+{{NEXT}}
+  - switch to Dist::Milla
+  - Marpa based fix parser
+  - Config::Onion based config loader
+  - move documentation to the Github wiki
+
+0.8014  2014-04-03
+  - fix Paged bugs
+  - more tests
+
+0.8013  2014-03-27
+  - Importer::JSON multiline switch
+  - Importer pod
+
+0.8012  2014-03-24
+  - add missing List::MoreUtils dependency
+
+0.8011  2014-03-18
+  - fix Paged bugs
+  - array and hash fixes
+  - more tests
+  - more pod
+
 0.8010  2014-03-11
   - bump required version of YAML::Any
   - use List::Util::sum instead of List::Util::sum0 (not present in older
