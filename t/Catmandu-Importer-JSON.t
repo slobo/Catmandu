@@ -28,4 +28,7 @@ isa_ok $importer, $pkg;
 
 is_deeply $importer->to_array, $data;
 
-done_testing 4;
+$importer = $pkg->new(file => 't/512.json', multiline => 1);
+ok $importer->to_array;
+
+done_testing;
