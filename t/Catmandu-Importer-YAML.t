@@ -43,7 +43,10 @@ is $arr->[2]->{name} , '村上 春樹' , 'checking utf8 issues';
 
 $importer = $pkg->new(file => 't/non_ascii.yaml');
 
-is $importer->count, 1000 , 'parsed non ascii file';
+is_deeply $importer->first->{term}, "Blavier, Andr\x{e9} (1922-2001)", # not \u{00e9}
+    'parse unicode to internal format';
 
-done_testing 6;
+is $importer->count, 999 , 'parsed non ascii file';
+
+done_testing 7;
 
