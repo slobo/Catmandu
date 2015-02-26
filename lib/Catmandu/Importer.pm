@@ -3,6 +3,7 @@ package Catmandu::Importer;
 use namespace::clean;
 use Catmandu::Sane;
 use Catmandu::Util qw(io);
+use Furl::HTTP;
 use Moo::Role;
 
 with 'Catmandu::Logger';
@@ -19,29 +20,51 @@ around generator => sub {
 };
 
 has file => (
-    is      => 'ro',
-    lazy    => 1,
-    default => sub { \*STDIN },
+    is => 'lazy',
+);
+
+has url => (
+    is        => 'ro',
+    predicate => 1,
 );
 
 has fh => (
-    is      => 'ro',
-    lazy    => 1,
-    builder => 1,
+    is => 'lazy',
 );
 
 has encoding => (
-    is       => 'ro',
-    builder  => 1,
+    is => 'lazy',
 );
+
+has http_client => (
+    is => 'lazy',
+); 
+
+sub _build_file {
+    \*STDIN;
+}
+
+sub _build_fh {
+    my ($self) = @_;
+    my $io;
+    if ($self->has_url) {
+        # TODO client args (agent, ...)
+        # TODO error handling
+        my ($http_version, $code, $msg, $headers, $body) =
+            $self->http_client->request(method => 'GET', url => $self->url);
+        $io = \$body;
+    } else {
+        $io = $self->file;
+    }
+    io($io, mode => 'r', binmode => $self->encoding);
+}
 
 sub _build_encoding {
     ':utf8';
 }
 
-sub _build_fh {
-    # build from file. may be build from URL in a future version
-    io($_[0]->file, mode => 'r', binmode => $_[0]->encoding);
+sub _build_http_client {
+    Furl::HTTP->new;
 }
 
 sub readline {

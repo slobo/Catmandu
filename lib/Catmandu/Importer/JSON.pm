@@ -2,12 +2,14 @@ package Catmandu::Importer::JSON;
 
 use namespace::clean;
 use Catmandu::Sane;
+use Catmandu::Util qw(data_at);
 use JSON::XS ();
 use Moo;
 
 with 'Catmandu::Importer';
 
-has json      => (is => 'ro', lazy => 1, builder => '_build_json');
+has json      => (is => 'lazy');
+has path      => (is => 'ro', predicate => 1);
 has multiline => (is => 'ro', default => sub { 0 });
 has array     => (is => 'ro', default => sub { 0 });
 
@@ -21,34 +23,56 @@ sub default_encoding { ':raw' }
 sub generator {
     my ($self) = @_;
 
-    $self->multiline || $self->array ? sub {
-        state $json = $self->json;
-        state $fh   = $self->fh;
+    if ($self->multiline || $self->array) {
+        return sub {
+            state $json = $self->json;
+            state $fh   = $self->fh;
 
-        for (;;) {
-            my $res = sysread($fh, my $buf, 512);
-            $res // Catmandu::Error->throw($!);
-            $json->incr_parse($buf); # void context, so no parsing
-            $json->incr_text =~ s/^[^{]+//;
-            return if $json->incr_text =~ /^$/;
-            last if $json->incr_text =~ /^{/;
-        }
-
-        # read data until we get a single json object
-        for (;;) {
-            if (my $data = $json->incr_parse) {
-                return $data;
+            for (;;) {
+                my $res = sysread($fh, my $buf, 512);
+                $res // Catmandu::Error->throw($!);
+                $json->incr_parse($buf); # void context, so no parsing
+                $json->incr_text =~ s/^[^{]+//;
+                return if $json->incr_text =~ /^$/;
+                last if $json->incr_text =~ /^{/;
             }
 
-            my $res = sysread($fh, my $buf, 512);
-            $res // Catmandu::Error->throw($!);
-            $res || Catmandu::Error->throw("JSON syntax error: unexpected end of object");
-            $json->incr_parse($buf);
-        }
+            # read data until we get a single json object
+            for (;;) {
+                if (my $data = $json->incr_parse) {
+                    return $data;
+                }
 
-        return;
- 
-    } : sub {
+                my $res = sysread($fh, my $buf, 512);
+                $res // Catmandu::Error->throw($!);
+                $res || Catmandu::Error->throw("JSON syntax error: unexpected end of object");
+                $json->incr_parse($buf);
+            }
+
+            return;
+     
+        };
+    }
+
+    if ($self->has_path) {
+        return sub {
+            state $json = $self->json;
+            state $fh   = $self->fh;
+            state @buf;
+            while (1) {
+                return shift @buf if @buf;
+                if (defined(my $line = <$fh>)) {
+                    my $data = $json->decode($line);
+                    @buf = data_at($self->path, $data); # TODO use something faster
+                    next;        
+                }
+                last;
+            }
+            return;
+        };
+    }
+
+    sub {
         state $json = $self->json;
         state $fh   = $self->fh;
         if (defined(my $line = <$fh>)) {
