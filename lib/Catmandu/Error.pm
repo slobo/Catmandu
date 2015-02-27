@@ -66,6 +66,20 @@ extends 'Catmandu::Error';
 has data => (is => 'ro');
 has fix => (is => 'ro');
 
+package Catmandu::HTTPError;
+use namespace::clean;
+use Catmandu::Sane;
+use Moo;
+extends 'Catmandu::Error';
+
+has code => (is => 'ro');
+has url => (is => 'ro');
+has method => (is => 'ro');
+has request_headers => (is => 'ro');
+has request_body => (is => 'ro');
+has response_headers => (is => 'ro');
+has response_body => (is => 'ro');
+
 =head1 NAME
 
 Catmandu::Error - Catmandu error hierarchy
@@ -97,6 +111,7 @@ Catmandu::Error - Catmandu error hierarchy
                 Catmandu::NoSuchFixPackage
             Catmandu::FixParseError
             Catmandu::FixError
+            Catmandu::HTTPError
 
 =head1 SEE ALSO
 

@@ -2,8 +2,9 @@ package Catmandu::Importer;
 
 use namespace::clean;
 use Catmandu::Sane;
-use Catmandu::Util qw(io);
+use Catmandu::Util qw(io is_value is_hash_ref);
 use Furl::HTTP;
+use URI::Template;
 use Moo::Role;
 
 with 'Catmandu::Logger';
@@ -28,6 +29,29 @@ has url => (
     predicate => 1,
 );
 
+has method => (
+    is => 'lazy',
+);
+
+has headers => (
+    is => 'lazy',
+);
+
+has body => (
+    is        => 'ro',
+    predicate => 1,
+);
+
+has variables => (
+    is        => 'ro',
+    predicate => 1,
+    coerce    => sub {
+        my $vars = $_[0];
+        $vars = [$vars] if is_value $vars;
+        $vars;   
+    },
+);
+
 has fh => (
     is => 'lazy',
 );
@@ -44,14 +68,43 @@ sub _build_file {
     \*STDIN;
 }
 
+sub _build_headers {
+    [];
+}
+
+sub _build_method {
+    'GET';
+}
+
 sub _build_fh {
     my ($self) = @_;
     my $io;
     if ($self->has_url) {
-        # TODO client args (agent, ...)
-        # TODO error handling
-        my ($http_version, $code, $msg, $headers, $body) =
-            $self->http_client->request(method => 'GET', url => $self->url);
+        my $url = $self->url;
+        if ($self->has_variables) {
+            my $url_template = URI::Template->new($url);
+            my $vars = $self->variables;
+            $url = $url_template->process(is_hash_ref($vars) ? %$vars : $vars);
+        }
+        my %args = (
+            method  => $self->method, 
+            url     => $self->url,
+            headers => $self->headers,
+        );
+        $args{content} = $self->body if $self->has_body;
+        my ($http_version, $code, $message, $headers, $body) = $self->http_client->request(%args);
+        if ($code < 200 || $code >= 300) {
+            Catmandu::HTTPError->throw({
+                code => $code,
+                message => $message,
+                url => $url,
+                method => $self->method,
+                request_headers => $self->headers,
+                request_body => $self->body,
+                response_headers => $headers,
+                response_body => $body,
+            });
+        }
         $io = \$body;
     } else {
         $io = $self->file;
@@ -64,6 +117,7 @@ sub _build_encoding {
 }
 
 sub _build_http_client {
+    # TODO client options
     Furl::HTTP->new;
 }
 
@@ -106,9 +160,7 @@ Catmandu::Importer - Namespace for packages that can import
     my $importer = Catmandu->importer('Hello', file => '/tmp/names.txt');
     $importer->each(sub {
         my $items = shift;
-        .
-        .
-        .
+        ...
     });
 
     # Or on the command line

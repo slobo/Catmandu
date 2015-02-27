@@ -138,7 +138,7 @@ sub run {
 
     try {
         $self->execute_command($cmd, $opts, @args);
-    } catch {
+    } catch { # TODO turn this into a method
         if (is_instance $_, 'Catmandu::NoSuchPackage') {
             my $pkg_name = $_->package_name;
 
@@ -187,10 +187,29 @@ sub run {
             my $fix     = $_->fix;
 
             say STDERR "Oops! One of your fixes threw an error...";
-            say STDERR "Source: " . $_->fix;
+            say STDERR "Source: $fix";
             say STDERR "Error: $message";
-
             say STDERR "Input:\n" . Dumper($data) if defined $data;
+
+            goto ERROR;
+        }
+        elsif (is_instance $_, 'Catmandu::HTTPError') {
+            my $message       = $_->message;
+            my $code          = $_->code;
+            my $url           = $_->url;
+            my $method        = $_->method;
+            my $request_body  = $_->request_body;
+            my $response_body = $_->response_body;
+
+            say STDERR "Oops! Got a HTTP error...";
+            say STDERR "Code: $code";
+            say STDERR "Error: $message";
+            say STDERR "URL: $url";
+            say STDERR "Method: $method";
+            say STDERR "Request headers:\n" . Dumper($_->request_headers);
+            say STDERR "Request body:\n$request_body" if is_string $request_body;
+            say STDERR "Response headers:\n" . Dumper($_->response_headers);
+            say STDERR "Response body:\n$response_body" if is_string $response_body;
 
             goto ERROR;
         }

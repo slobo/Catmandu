@@ -18,12 +18,17 @@ sub _build_json {
     JSON::XS->new->utf8($self->encoding eq ':raw');
 }
 
+sub _build_headers {
+     ['Accept' => 'application/json'];
+}
+
 sub default_encoding { ':raw' }
 
 sub generator {
     my ($self) = @_;
 
     if ($self->multiline || $self->array) {
+        # switch to incremental parser
         return sub {
             state $json = $self->json;
             state $fh   = $self->fh;

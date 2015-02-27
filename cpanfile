@@ -35,6 +35,7 @@ requires 'Text::CSV', '1.21';
 requires 'Time::HiRes', 0; # not always installed?
 requires 'Throwable', '0.200004';
 requires 'Try::Tiny::ByClass', '0.01';
+requires 'URI::Template', '0.21';
 requires 'YAML::XS', '0.41';
 
 recommends 'Log::Log4perl', '1.44';
