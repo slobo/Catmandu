@@ -79,6 +79,7 @@ sub _build_method {
 sub _build_fh {
     my ($self) = @_;
     my $io;
+    # TODO paging
     if ($self->has_url) {
         my $url = $self->url;
         if ($self->has_variables) {
