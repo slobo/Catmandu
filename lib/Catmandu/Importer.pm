@@ -10,6 +10,7 @@ use Moo::Role;
 with 'Catmandu::Logger';
 with 'Catmandu::Iterable';
 with 'Catmandu::Fixable';
+with 'Catmandu::Serializer';
 
 around generator => sub {
     my ($orig, $self) = @_;
@@ -88,11 +89,15 @@ sub _build_fh {
             $url = $url_template->process(is_hash_ref($vars) ? %$vars : $vars);
         }
         my %args = (
+            url     => $url,
             method  => $self->method, 
-            url     => $self->url,
             headers => $self->headers,
         );
-        $args{content} = $self->body if $self->has_body;
+        if ($self->has_body) {
+            my $body = $self->body;
+            $args{content} = ref $body ? $self->serialize($body) : $body;
+        }
+        # TODO streaming
         my ($http_version, $code, $message, $headers, $body) = $self->http_client->request(%args);
         if ($code < 200 || $code >= 300) {
             Catmandu::HTTPError->throw({
