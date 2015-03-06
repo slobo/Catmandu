@@ -3,7 +3,8 @@ package Catmandu::Importer;
 use namespace::clean;
 use Catmandu::Sane;
 use Catmandu::Util qw(io is_value is_hash_ref);
-use Furl::HTTP;
+use Coro;
+use FurlX::Coro::HTTP;
 use URI::Template;
 use Moo::Role;
 
@@ -88,33 +89,46 @@ sub _build_fh {
             my $vars = $self->variables;
             $url = $url_template->process(is_hash_ref($vars) ? %$vars : $vars);
         }
+
+        my $chan = Coro::Channel->new(1);
+
         my %args = (
             url     => $url,
             method  => $self->method, 
             headers => $self->headers,
+            write_code => sub {
+                my ($code, $message, $headers, $body) = @_;
+                if ($code < 200 || $code >= 300) {
+                    Catmandu::HTTPError->throw({
+                        code => $code,
+                        message => $message,
+                        url => $url,
+                        method => $self->method,
+                        request_headers => $self->headers,
+                        request_body => $self->body,
+                        response_headers => $headers,
+                        response_body => $body,
+                    });
+                }
+                $chan->put($body);
+            },
         );
+
         if ($self->has_body) {
             my $body = $self->body;
             $args{content} = ref $body ? $self->serialize($body) : $body;
         }
-        # TODO streaming
-        my ($http_version, $code, $message, $headers, $body) = $self->http_client->request(%args);
-        if ($code < 200 || $code >= 300) {
-            Catmandu::HTTPError->throw({
-                code => $code,
-                message => $message,
-                url => $url,
-                method => $self->method,
-                request_headers => $self->headers,
-                request_body => $self->body,
-                response_headers => $headers,
-                response_body => $body,
-            });
-        }
-        $io = \$body;
+
+        async {
+            $self->http_client->request(%args);
+            $chan->shutdown;
+        };
+
+        $io = sub { $chan->get };
     } else {
         $io = $self->file;
     }
+
     io($io, mode => 'r', binmode => $self->encoding);
 }
 
@@ -123,8 +137,8 @@ sub _build_encoding {
 }
 
 sub _build_http_client {
-    # TODO client options
-    Furl::HTTP->new;
+    # TODO Furl client options
+    FurlX::Coro::HTTP->new;
 }
 
 sub readline {

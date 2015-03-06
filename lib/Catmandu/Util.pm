@@ -9,6 +9,7 @@ use List::Util ();
 use Data::Compare ();
 use IO::File;
 use IO::Handle::Util ();
+use IO::Handle::Prototype::Fallback;
 use File::Spec;
 use YAML::XS ();
 use JSON::XS ();
@@ -103,7 +104,7 @@ sub io {
         $io = IO::File->new($arg, $mode);
         defined($io) && binmode $io, $binmode;
     } elsif (is_code_ref($arg) && $mode eq 'r') {
-        $io = IO::Handle::Util::io_from_getline($arg);
+        $io = IO::Handle::Prototype::Fallback->new(__read => $arg);
     } elsif (is_code_ref($arg) && $mode eq 'w') {
         $io = IO::Handle::Util::io_from_write_cb($arg);
     } elsif (is_instance($arg, 'IO::Handle')) {
