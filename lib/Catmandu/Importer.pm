@@ -39,6 +39,19 @@ has headers => (
     is => 'lazy',
 );
 
+my @HTTP_CLIENT_ARGS = qw(
+    agent
+    timeout
+    inactivity_timeout
+    max_redirects
+    proxy
+    no_proxy
+);
+
+for my $arg (@HTTP_CLIENT_ARGS) {
+    has $arg => (is => 'ro');
+}
+
 has body => (
     is        => 'ro',
     predicate => 1,
@@ -81,7 +94,6 @@ sub _build_method {
 sub _build_fh {
     my ($self) = @_;
     my $io;
-    # TODO paging
     if ($self->has_url) {
         my $url = $self->url;
         if ($self->has_variables) {
@@ -137,8 +149,13 @@ sub _build_encoding {
 }
 
 sub _build_http_client {
-    # TODO Furl client options
-    FurlX::Coro::HTTP->new;
+    my ($self) = @_;
+    my %args;
+    for my $arg (@HTTP_CLIENT_ARGS) {
+        my $val = $self->$arg();
+        $args{$arg} = $val if defined $val;
+    }
+    FurlX::Coro::HTTP->new(%args);
 }
 
 sub readline {
