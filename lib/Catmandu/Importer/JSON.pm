@@ -27,11 +27,15 @@ sub default_encoding { ':raw' }
 sub generator {
     my ($self) = @_;
 
+    # TODO fix url + multiline + sysread
     if ($self->multiline || $self->array) {
         # switch to incremental parser
         return sub {
-            state $json = $self->json;
-            state $fh   = $self->fh;
+            state $json     = $self->json;
+            state $fh       = $self->fh;
+            state $has_path = $self->has_path;
+            state $path     = $self->path;
+            state @buf;
 
             for (;;) {
                 my $res = sysread($fh, my $buf, 512);
@@ -44,8 +48,15 @@ sub generator {
 
             # read data until we get a single json object
             for (;;) {
+                if ($has_path && @buf) {
+                    return shift @buf;
+                }
                 if (my $data = $json->incr_parse) {
-                    return $data;
+                    if ($has_path) {
+                        @buf = data_at($path, $data); # TODO use something faster
+                    } else {
+                        return $data;
+                    }
                 }
 
                 my $res = sysread($fh, my $buf, 512);
