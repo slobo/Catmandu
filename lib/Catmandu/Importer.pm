@@ -28,7 +28,7 @@ has file => (is => 'lazy');
 has fh => (is => 'lazy');
 has encoding => (is => 'lazy');
 has url => (is => 'ro', predicate => 1);
-has http_client  => (is => 'lazy'); 
+has http_client => (is => 'lazy'); 
 has method => (is => 'lazy');
 has headers => (is => 'lazy');
 has agent => (is => 'ro', predicate => 1);

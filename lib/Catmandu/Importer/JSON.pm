@@ -32,13 +32,17 @@ sub generator {
         return sub {
             state $json     = $self->json;
             state $fh       = $self->fh;
+            state $has_url  = $self->has_url;
             state $has_path = $self->has_path;
             state $path     = $self->path;
-            state @buf;
+            state @data_buf;
 
             for (;;) {
-                my $res = sysread($fh, my $buf, 512);
+                my $buf;
+                # use normal read with tied handle
+                my $res = $has_url ? read($fh, $buf, 512) : sysread($fh, $buf, 512);
                 $res // Catmandu::Error->throw($!);
+                $buf // return; # TODO this occurs with a tied handle, but shouldn't?
                 $json->incr_parse($buf); # void context, so no parsing
                 $json->incr_text =~ s/^[^{]+//;
                 return if $json->incr_text =~ /^$/;
@@ -47,19 +51,20 @@ sub generator {
 
             # read data until we get a single json object
             for (;;) {
-                if ($has_path && @buf) {
-                    return shift @buf;
+                if ($has_path && @data_buf) {
+                    return shift @data_buf;
                 }
                 if (my $data = $json->incr_parse) {
                     if ($has_path) {
-                        @buf = data_at($path, $data); # TODO use something faster
+                        @data_buf = data_at($path, $data); # TODO use something faster
                         next;
                     } else {
                         return $data;
                     }
                 }
 
-                my $res = sysread($fh, my $buf, 512);
+                my $buf;
+                my $res = $has_url ? read($fh, $buf, 512) : sysread($fh, $buf, 512);
                 $res // Catmandu::Error->throw($!);
                 $res || Catmandu::Error->throw("JSON syntax error: unexpected end of object");
                 $json->incr_parse($buf);
@@ -74,12 +79,12 @@ sub generator {
         return sub {
             state $json = $self->json;
             state $fh   = $self->fh;
-            state @buf;
+            state @data_buf;
             while (1) {
-                return shift @buf if @buf;
+                return shift @data_buf if @data_buf;
                 if (defined(my $line = <$fh>)) {
                     my $data = $json->decode($line);
-                    @buf = data_at($self->path, $data); # TODO use something faster
+                    @data_buf = data_at($self->path, $data); # TODO use something faster
                     next;        
                 }
                 last;
