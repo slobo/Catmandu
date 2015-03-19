@@ -27,7 +27,6 @@ sub default_encoding { ':raw' }
 sub generator {
     my ($self) = @_;
 
-    # TODO fix url + multiline + sysread
     if ($self->multiline || $self->array) {
         # switch to incremental parser
         return sub {
@@ -54,6 +53,7 @@ sub generator {
                 if (my $data = $json->incr_parse) {
                     if ($has_path) {
                         @buf = data_at($path, $data); # TODO use something faster
+                        next;
                     } else {
                         return $data;
                     }

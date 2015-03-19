@@ -17,13 +17,14 @@ requires 'Data::Compare', '1.22';
 requires 'Data::UUID', '1.217';
 requires 'Data::Util', '0.59';
 requires 'File::Find::Rule', '0.33';
-requires 'FurlX::Coro', '1.02';
 requires 'Hash::Merge::Simple', 0;
+requires 'HTTP::Request', '6.00';
 requires 'IO::Handle::Util', '0.01';
 requires 'JSON::XS', '2.3';
 requires 'List::MoreUtils', '0.33';
 requires 'Log::Any', '1.03';
 requires 'Log::Any::Adapter', '1.03';
+requires 'LWP::Protocol::AnyEvent::http', '1.8.0';
 requires 'Time::Piece', 0; # undeclared Marpa dependency
 requires 'Marpa::R2', '2.084000';
 requires 'Module::Info', 0;

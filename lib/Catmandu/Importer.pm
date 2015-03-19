@@ -4,8 +4,10 @@ use namespace::clean;
 use Catmandu::Sane;
 use Catmandu::Util qw(io is_value is_hash_ref);
 use Coro;
-use FurlX::Coro::HTTP;
-use URI::Template;
+use LWP::Protocol::AnyEvent::http;
+use LWP::UserAgent;
+use HTTP::Request ();
+use URI::Template ();
 use Moo::Role;
 
 with 'Catmandu::Logger';
@@ -22,41 +24,17 @@ around generator => sub {
     $generator;
 };
 
-has file => (
-    is => 'lazy',
-);
-
-has url => (
-    is        => 'ro',
-    predicate => 1,
-);
-
-has method => (
-    is => 'lazy',
-);
-
-has headers => (
-    is => 'lazy',
-);
-
-my @HTTP_CLIENT_ARGS = qw(
-    agent
-    timeout
-    inactivity_timeout
-    max_redirects
-    proxy
-    no_proxy
-);
-
-for my $arg (@HTTP_CLIENT_ARGS) {
-    has $arg => (is => 'ro');
-}
-
-has body => (
-    is        => 'ro',
-    predicate => 1,
-);
-
+has file => (is => 'lazy');
+has fh => (is => 'lazy');
+has encoding => (is => 'lazy');
+has url => (is => 'ro', predicate => 1);
+has http_client  => (is => 'lazy'); 
+has method => (is => 'lazy');
+has headers => (is => 'lazy');
+has agent => (is => 'ro', predicate => 1);
+has max_redirect => (is => 'ro', predicate => 1);
+has timeout => (is => 'ro', predicate => 1);
+has body=> (is => 'ro', predicate => 1);
 has variables => (
     is        => 'ro',
     predicate => 1,
@@ -66,18 +44,6 @@ has variables => (
         $vars;   
     },
 );
-
-has fh => (
-    is => 'lazy',
-);
-
-has encoding => (
-    is => 'lazy',
-);
-
-has http_client => (
-    is => 'lazy',
-); 
 
 sub _build_file {
     \*STDIN;
@@ -104,35 +70,33 @@ sub _build_fh {
 
         my $chan = Coro::Channel->new(1);
 
-        my %args = (
-            url     => $url,
-            method  => $self->method, 
-            headers => $self->headers,
-            write_code => sub {
-                my ($code, $message, $headers, $body) = @_;
-                if ($code < 200 || $code >= 300) {
+        async {
+            my $request = HTTP::Request->new($self->method, $url, $self->headers);
+            if ($self->has_body) {
+                my $body = $self->body;
+                $request->content(ref $body ? $self->serialize($body) : $body);
+            }
+            $self->http_client->request($request, sub {
+                my ($data, $response) = @_;
+                unless ($response->is_success) {
+                    my $response_headers = [];
+                    for my $header ($response->header_field_names) {
+                        push @$response_headers, $header, $response->header($header);
+                    }
                     Catmandu::HTTPError->throw({
-                        code => $code,
-                        message => $message,
+                        code => $response->code,
+                        message => $response->status_line,
                         url => $url,
                         method => $self->method,
                         request_headers => $self->headers,
                         request_body => $self->body,
-                        response_headers => $headers,
-                        response_body => $body,
+                        response_headers => $response_headers,
+                        response_body => $data,
                     });
                 }
-                $chan->put($body);
-            },
-        );
+                $chan->put($data); 
+            });
 
-        if ($self->has_body) {
-            my $body = $self->body;
-            $args{content} = ref $body ? $self->serialize($body) : $body;
-        }
-
-        async {
-            $self->http_client->request(%args);
             $chan->shutdown;
         };
 
@@ -150,12 +114,12 @@ sub _build_encoding {
 
 sub _build_http_client {
     my ($self) = @_;
-    my %args;
-    for my $arg (@HTTP_CLIENT_ARGS) {
-        my $val = $self->$arg();
-        $args{$arg} = $val if defined $val;
-    }
-    FurlX::Coro::HTTP->new(%args);
+    my $ua = LWP::UserAgent->new;
+    $ua->agent($self->agent) if $self->has_agent;
+    $ua->max_redirect($self->max_redirect) if $self->has_max_redirect;
+    $ua->timeout($self->timeout) if $self->has_timeout;
+    $ua->protocols_allowed([qw(http https)]);
+    $ua;
 }
 
 sub readline {
