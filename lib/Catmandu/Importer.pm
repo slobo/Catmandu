@@ -71,31 +71,37 @@ sub _build_fh {
         my $chan = Coro::Channel->new(1);
 
         async {
+
             my $request = HTTP::Request->new($self->method, $url, $self->headers);
             if ($self->has_body) {
                 my $body = $self->body;
                 $request->content(ref $body ? $self->serialize($body) : $body);
             }
-            $self->http_client->request($request, sub {
-                my ($data, $response) = @_;
-                unless ($response->is_success) {
-                    my $response_headers = [];
-                    for my $header ($response->header_field_names) {
-                        push @$response_headers, $header, $response->header($header);
+
+            {
+                local $SIG{PIPE} = sub { exit };
+
+                $self->http_client->request($request, sub {
+                    my ($data, $response) = @_;
+                    unless ($response->is_success) {
+                        my $response_headers = [];
+                        for my $header ($response->header_field_names) {
+                            push @$response_headers, $header, $response->header($header);
+                        }
+                        Catmandu::HTTPError->throw({
+                            code => $response->code,
+                            message => $response->status_line,
+                            url => $url,
+                            method => $self->method,
+                            request_headers => $self->headers,
+                            request_body => $self->body,
+                            response_headers => $response_headers,
+                            response_body => $data,
+                        });
                     }
-                    Catmandu::HTTPError->throw({
-                        code => $response->code,
-                        message => $response->status_line,
-                        url => $url,
-                        method => $self->method,
-                        request_headers => $self->headers,
-                        request_body => $self->body,
-                        response_headers => $response_headers,
-                        response_body => $data,
-                    });
-                }
-                $chan->put($data); 
-            });
+                    $chan->put($data); 
+                });
+            };
 
             $chan->shutdown;
         };
