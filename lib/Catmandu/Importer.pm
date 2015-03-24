@@ -34,6 +34,7 @@ has headers => (is => 'lazy');
 has agent => (is => 'ro', predicate => 1);
 has max_redirect => (is => 'ro', predicate => 1);
 has timeout => (is => 'ro', predicate => 1);
+has verify_hostname => (is => 'ro', default => sub { 0 });
 has body => (is => 'ro', predicate => 1);
 has variables => (is => 'ro', predicate => 1);
 
@@ -116,6 +117,7 @@ sub _build_http_client {
     $ua->agent($self->agent) if $self->has_agent;
     $ua->max_redirect($self->max_redirect) if $self->has_max_redirect;
     $ua->timeout($self->timeout) if $self->has_timeout;
+    $ua->ssl_opts(verify_hostname => $self->verify_hostname);
     $ua->protocols_allowed([qw(http https)]);
     $ua;
 }
