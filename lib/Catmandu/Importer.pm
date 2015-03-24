@@ -34,7 +34,7 @@ has headers => (is => 'lazy');
 has agent => (is => 'ro', predicate => 1);
 has max_redirect => (is => 'ro', predicate => 1);
 has timeout => (is => 'ro', predicate => 1);
-has verify_hostname => (is => 'ro', default => sub { 0 });
+has verify_hostname => (is => 'ro', default => sub { 1 });
 has body => (is => 'ro', predicate => 1);
 has variables => (is => 'ro', predicate => 1);
 
