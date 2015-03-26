@@ -36,6 +36,7 @@ my %module_build_args = (
     "Data::UUID" => "1.217",
     "Data::Util" => "0.59",
     "File::Find::Rule" => "0.33",
+    "File::Slurp::Tiny" => "0.003",
     "HTTP::Request" => "6.00",
     "Hash::Merge::Simple" => 0,
     "IO::Handle::Util" => "0.01",
