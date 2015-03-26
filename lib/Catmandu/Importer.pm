@@ -64,11 +64,27 @@ sub _build_fh {
         my $chan = Coro::Channel->new(1);
 
         async {
-
             my $request = HTTP::Request->new($self->method, $url, $self->headers);
             if ($self->has_body) {
                 my $body = $self->body;
-                $request->content(ref $body ? $self->serialize($body) : $body);
+                if (ref $body) {
+                    # TODO support variables here too by walking the tree first
+                    $body = self->serialize($body);
+                } elsif ($self->has_variables) {
+                    my $vars = $self->variables;
+                    if (is_hash_ref($vars)) { # named variables
+                        for my $key (keys %$vars) {
+                            my $var = $vars->{$key};
+                            $body =~ s/{$key}/$var/; 
+                        }
+                    } else { # positional variables
+                        for my $var (@$vars) {
+                            $body =~ s/{\w+}/$var/; 
+                        }
+                    }
+                }
+     
+                $request->content($body);
             }
 
             {
