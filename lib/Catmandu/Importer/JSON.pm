@@ -15,14 +15,17 @@ has array     => (is => 'ro', default => sub { 0 });
 
 sub _build_json {
     my ($self) = @_;
-    JSON::XS->new->utf8($self->encoding eq ':raw');
+    JSON::XS->new->utf8(1);
 }
 
 sub _build_headers {
      ['Accept' => 'application/json'];
 }
 
-sub default_encoding { ':raw' }
+sub _build_encoding { 
+    my ($self) = @_;
+    $self->has_url ? ':utf8' : ':raw';
+}
 
 sub generator {
     my ($self) = @_;

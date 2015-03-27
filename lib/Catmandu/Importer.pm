@@ -89,54 +89,36 @@ sub _build_fh {
 
             local $SIG{PIPE} = sub { exit };
 
-            my $res = $self->http_client->request($request, sub {
-                my ($data, $response) = @_;
-                unless ($response->is_success) {
-                    my $response_headers = [];
-                    for my $header ($response->header_field_names) {
-                        push @$response_headers, $header, $response->header($header);
-                    }
-                    Catmandu::HTTPError->throw({
-                        code => $response->code,
-                        message => $response->status_line,
-                        url => $url,
-                        method => $self->method,
-                        request_headers => $self->headers,
-                        request_body => $self->body,
-                        response_headers => $response_headers,
-                        response_body => $data,
-                    });
-                }
-
-                $chan->put($data); 
+            my $response = $self->http_client->request($request, sub {
+                my ($data, $res) = @_;
+                $res->content($data);
+                $chan->put($res->decoded_content); 
             });
 
             $chan->shutdown;
 
-            unless ($res->is_success) {
+            unless ($response->is_success) {
                 my $response_headers = [];
-                for my $header ($res->header_field_names) {
-                    push @$response_headers, $header, $res->header($header);
+                for my $header ($response->header_field_names) {
+                    push @$response_headers, $header, $response->header($header);
                 }
                 Catmandu::HTTPError->throw({
-                    code => $res->code,
-                    message => $res->status_line,
+                    code => $response->code,
+                    message => $response->status_line,
                     url => $url,
                     method => $self->method,
                     request_headers => $self->headers,
                     request_body => $self->body,
                     response_headers => $response_headers,
-                    response_body => $res->content,
+                    response_body => $response->decoded_content,
                 });
             }
         };
 
-        $io = sub { $chan->get };
+        io(sub { $chan->get }, mode => 'r', binmode => $self->encoding);
     } else {
-        $io = $self->file;
+        io($self->file, mode => 'r', binmode => $self->encoding);
     }
-
-    io($io, mode => 'r', binmode => $self->encoding);
 }
 
 sub _build_encoding {
