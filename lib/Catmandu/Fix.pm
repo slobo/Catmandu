@@ -159,7 +159,7 @@ sub emit {
     $perl .= "} or do {";
     $perl .= $self->emit_declare_vars($err, '$@');
     # TODO Better to wrap the error in a FixError, we loose context here.
-    $perl .= "die(${err}) if is_instance(${err}, 'Catmandu::Error');";
+    $perl .= "${err}->throw if is_able(${err}, 'throw');";
     $perl .= "Catmandu::FixError->throw(message => ${err}, data => ${var}, fix => ${current_fix_var});";
     $perl .= "};";
     $perl .= "};";

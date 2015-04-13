@@ -11,7 +11,7 @@ L<catmandu>
 =cut
 
 use Catmandu::Sane;
-use Catmandu::Util qw(is_instance is_able is_string);
+use Catmandu::Util qw(is_instance is_able is_string is_positive);
 use Catmandu;
 use Log::Any::Adapter;
 use Data::Dumper;
@@ -59,7 +59,7 @@ log4perl.appender.STDOUT.utf8=1
 log4perl.appender.STDOUT.layout=PatternLayout
 log4perl.appender.STDOUT.layout.ConversionPattern=%d [%P] - %p %l %M time=%r : %m%n
 
-log4perl.appender.STDERR=Log::Log4perl::Appender::Screen
+log4perl.appender.STDERR=Log::Log4perl::Appender::ScreenColoredLevels
 log4perl.appender.STDERR.stderr=1
 log4perl.appender.STDERR.utf8=1
 
@@ -73,6 +73,7 @@ EOF
 sub setup_debugging {
     my %LEVELS = ( 1 => 'WARN' , 2 => 'INFO' , 3 => 'DEBUG');
     my $debug = shift;
+    $debug = 3 if is_positive($debug) && $debug > 3;
     my $level = $LEVELS{$debug} // 'WARN';
     my $load_from;
 
@@ -120,10 +121,10 @@ sub run {
     my ($global_opts, $argv) = $class->_process_args([@ARGV], $class->_global_option_processing_params);
 
     my $load_path = $global_opts->{load_path} || [];
-    my $lib_path  = $global_opts->{lib_path} || [];
+    my $lib_path = $global_opts->{lib_path} || [];
 
     if (exists $global_opts->{debug}) {
-        setup_debugging($global_opts->{debug} // 1);
+        setup_debugging($global_opts->{debug});
     }
 
     if (@$lib_path) {
