@@ -32,9 +32,9 @@ sub emit {
             } 
             $perl .= "${temp_var} = Catmandu->importer(${name_var}, variables => ${val_var}, %{${opts_var}})->first;";
             if ($self->ignore_404) {
-                $perl .= "} catch {" .
-                    "if (\$_ =~ /^404/) { ${temp_var} = undef; } else { die \$_; }" .
-                "};";
+                $perl .= "} catch_case ['Catmandu::HTTPError' => sub {" .
+                    "if (\$_->code eq '404') { ${temp_var} = undef; } else { \$_->throw }" .
+                "}];";
             } 
             $perl .= "if (defined(${temp_var})) {";
             $perl .= "${val_var} = ${temp_var};";
