@@ -7,14 +7,14 @@ use Catmandu::Fix::Has;
 
 with 'Catmandu::Fix::Base';
 
-has path       => (fix_arg => 1);
-has store_name => (fix_arg => 1);
-has bag_name   => (fix_opt => 1, init_arg => 'bag');
-has default    => (fix_opt => 1);
-has delete     => (fix_opt => 1);
-has store_args => (fix_opt => 'collect');
-has store      => (is => 'lazy', init_arg => undef);
-has bag        => (is => 'lazy', init_arg => undef);
+has path          => (fix_arg => 1);
+has store_name    => (fix_arg => 1);
+has bag_name      => (fix_opt => 1, init_arg => 'bag');
+has default       => (fix_opt => 1);
+has delete        => (fix_opt => 1);
+has store_args    => (fix_opt => 'collect');
+has store         => (is => 'lazy', init_arg => undef);
+has bag           => (is => 'lazy', init_arg => undef);
 
 sub _build_store {
     my ($self) = @_;

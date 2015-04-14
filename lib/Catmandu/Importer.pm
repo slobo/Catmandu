@@ -95,14 +95,13 @@ sub _build_fh {
                 $chan->put($res->decoded_content); 
             });
 
-            $chan->shutdown;
 
             unless ($response->is_success) {
                 my $response_headers = [];
                 for my $header ($response->header_field_names) {
                     push @$response_headers, $header, $response->header($header);
                 }
-                Catmandu::HTTPError->throw({
+                $chan->put(Catmandu::HTTPError->new({
                     code => $response->code,
                     message => $response->status_line,
                     url => $url,
@@ -111,11 +110,19 @@ sub _build_fh {
                     request_body => $self->body,
                     response_headers => $response_headers,
                     response_body => $response->decoded_content,
-                });
+                }));
             }
+            
+            $chan->shutdown;
         };
 
-        io(sub { $chan->get }, mode => 'r', binmode => $self->encoding);
+        my $io = sub {
+            my $data = $chan->get;
+            $data->throw if ref $data;
+            $data;
+        };
+
+        io($io, mode => 'r', binmode => $self->encoding);
     } else {
         io($self->file, mode => 'r', binmode => $self->encoding);
     }
