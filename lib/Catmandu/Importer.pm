@@ -7,6 +7,7 @@ use Coro;
 use LWP::Protocol::AnyEvent::http;
 use LWP::UserAgent;
 use HTTP::Request ();
+use URI ();
 use URI::Template ();
 use Moo::Role;
 
@@ -27,8 +28,6 @@ around generator => sub {
 has file => (is => 'lazy');
 has fh => (is => 'lazy');
 has encoding => (is => 'lazy');
-has url => (is => 'ro', predicate => 1);
-has http_client => (is => 'lazy'); 
 has method => (is => 'lazy');
 has headers => (is => 'lazy');
 has agent => (is => 'ro', predicate => 1);
@@ -37,6 +36,14 @@ has timeout => (is => 'ro', predicate => 1);
 has verify_hostname => (is => 'ro', default => sub { 1 });
 has body => (is => 'ro', predicate => 1);
 has variables => (is => 'ro', predicate => 1);
+has paginate => (is => 'ro');
+has total_param => (is => 'ro', default => sub { 'total' });
+has limit_param => (is => 'ro', default => sub { 'limit' });
+has start_param => (is => 'ro', default => sub { 'start' });
+has url => (is => 'lazy', init_arg => undef);
+has _url_template => (is => 'ro', predicate => 'has_url', init_arg => 'url');
+has _http_client => (is => 'ro', lazy => 1, builder => '_build_http_client', init_arg => undef);
+has _channel => (is => 'ro', lazy => 1, builder => '_build_channel', init_arg => undef);
 
 sub _build_file {
     \*STDIN;
@@ -50,82 +57,45 @@ sub _build_method {
     'GET';
 }
 
+sub _build_channel {
+    Coro::Channel->new(1);
+}
+
+sub _build_url {
+    my ($self) = @_;
+    return unless $self->has_url;
+    my $url = $self->_url_template;
+    if ($self->has_variables) {
+        my $url_template = URI::Template->new($url);
+        my $vars = $self->variables;
+        $url_template->process(is_hash_ref($vars) ? %$vars : $vars);
+    } else {
+        URI->new($url);
+    }
+}
+
 sub _build_fh {
     my ($self) = @_;
     my $io;
-    if ($self->has_url) {
-        my $url = $self->url;
-        if ($self->has_variables) {
-            my $url_template = URI::Template->new($url);
-            my $vars = $self->variables;
-            $url = $url_template->process(is_hash_ref($vars) ? %$vars : $vars);
-        }
 
-        my $chan = Coro::Channel->new(1);
+    if ($self->has_url) {
+        my $channel = $self->_channel;
 
         async {
-            my $request = HTTP::Request->new($self->method, $url, $self->headers);
-            if ($self->has_body) {
-                my $body = $self->body;
-                if (ref $body) {
-                    # TODO support variables here too by walking the tree first
-                    $body = self->serialize($body);
-                } elsif ($self->has_variables) {
-                    my $vars = $self->variables;
-                    if (is_hash_ref($vars)) { # named variables
-                        for my $key (keys %$vars) {
-                            my $var = $vars->{$key};
-                            $body =~ s/{$key}/$var/; 
-                        }
-                    } else { # positional variables
-                        for my $var (@$vars) {
-                            $body =~ s/{\w+}/$var/; 
-                        }
-                    }
-                }
-     
-                $request->content($body);
-            }
-
-            local $SIG{PIPE} = sub { exit };
-
-            my $response = $self->http_client->request($request, sub {
-                my ($data, $res) = @_;
-                $res->content($data);
-                $chan->put($res->decoded_content); 
-            });
-
-
-            unless ($response->is_success) {
-                my $response_headers = [];
-                for my $header ($response->header_field_names) {
-                    push @$response_headers, $header, $response->header($header);
-                }
-                $chan->put(Catmandu::HTTPError->new({
-                    code => $response->code,
-                    message => $response->status_line,
-                    url => $url,
-                    method => $self->method,
-                    request_headers => $self->headers,
-                    request_body => $self->body,
-                    response_headers => $response_headers,
-                    response_body => $response->decoded_content,
-                }));
-            }
-            
-            $chan->shutdown;
+            $self->_do_http_request;
+            $channel->shutdown;
         };
 
-        my $io = sub {
-            my $data = $chan->get;
-            $data->throw if ref $data;
+        $io = sub {
+            my $data = $channel->get;
+            $data->throw if ref $data; # got a http error
             $data;
         };
-
-        io($io, mode => 'r', binmode => $self->encoding);
     } else {
-        io($self->file, mode => 'r', binmode => $self->encoding);
+        $io = $self->file;
     }
+    
+    io($io, mode => 'r', binmode => $self->encoding);
 }
 
 sub _build_encoding {
@@ -143,12 +113,101 @@ sub _build_http_client {
     $ua;
 }
 
+sub _do_http_request {
+    my ($self, $url) = @_;
+    $url //= $self->url;
+say STDERR $url;
+    my $channel = $self->_channel;
+    my $request = HTTP::Request->new($self->method, $url, $self->headers);
+
+    if ($self->has_body) {
+        my $body = $self->body;
+        if (ref $body) {
+            $body = $self->serialize($body);
+        } elsif ($self->has_variables) {
+            my $vars = $self->variables;
+            if (is_hash_ref($vars)) { # named variables
+                for my $key (keys %$vars) {
+                    my $var = $vars->{$key};
+                    $body =~ s/{$key}/$var/; 
+                }
+            } else { # positional variables
+                for my $var (@$vars) {
+                    $body =~ s/{\w+}/$var/; 
+                }
+            }
+        }
+
+        $request->content($body);
+    }
+
+    local $SIG{PIPE} = sub { exit };
+
+    if ($self->paginate) {
+        my $response = $self->_http_client->request($request);
+
+        unless ($response->is_success) {
+            $self->_http_error($url, $response);
+            return;
+        }
+        my $data = $response->decoded_content;
+        # TODO we're deserializing twice here
+        # TODO yield ?
+        $channel->put($data);
+        $data = $self->deserialize($data);
+        if (is_hash_ref($data)) {
+            # TODO push all errors to channel
+            my $total = $data->{$self->total_param} // Catmandu::Error->throw('total missing');
+            my $start = $data->{$self->start_param} // 0;
+            my $limit = $data->{$self->limit_param} // Catmandu::Error->throw('limit missing');
+            if ($start * $limit < $total) {
+                $url->query_form(
+                    $self->start_param => $start + $limit - 1,                
+                    $self->limit_param => $limit,                
+                );
+                return $self->_do_http_request($url);
+            }
+        }
+    } else {
+        my $response = $self->_http_client->request($request, sub {
+            my ($data, $res) = @_;
+            $res->content($data);
+            $channel->put($res->decoded_content); 
+        });
+
+        unless ($response->is_success) {
+            $self->_http_error($url, $response);
+        }
+    }
+
+    return;
+}
+
+sub _http_error {
+    my ($self, $url, $response) = @_;
+    my $response_headers = [];
+    for my $header ($response->header_field_names) {
+        push @$response_headers, $header, $response->header($header);
+    }
+    # push error through the channel
+    $self->_channel->put(Catmandu::HTTPError->new({
+        code             => $response->code,
+        message          => $response->status_line,
+        url              => $url,
+        method           => $self->method,
+        request_headers  => $self->headers,
+        request_body     => $self->body,
+        response_headers => $response_headers,
+        response_body    => $response->decoded_content,
+    }));
+}
+
 sub readline {
     $_[0]->fh->getline;
 }
 
 sub readall {
-    join '', $_[0]->fh->getlines;
+    join('', $_[0]->fh->getlines);
 }
 
 =head1 NAME
