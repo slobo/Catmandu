@@ -81,9 +81,12 @@ sub _build_fh {
     if ($self->has_url) {
         my $channel = $self->_channel;
 
+        my $url = $self->url;
+
         async {
-            $self->_do_http_request;
-            $channel->shutdown;
+            while (defined($url)) {
+                $url = $self->_do_http_request($url);
+            }
         };
 
         $io = sub {
@@ -115,7 +118,7 @@ sub _build_http_client {
 
 sub _do_http_request {
     my ($self, $url) = @_;
-    $url //= $self->url;
+    #$url //= $self->url;
 say STDERR $url;
     my $channel = $self->_channel;
     my $request = HTTP::Request->new($self->method, $url, $self->headers);
@@ -154,7 +157,6 @@ say STDERR $url;
         # TODO we're deserializing twice here
         # TODO yield ?
         $channel->put($data);
-        cede;
         $data = $self->deserialize($data);
         if (is_hash_ref($data)) {
             # TODO push all errors to channel
@@ -166,7 +168,7 @@ say STDERR $url;
                     $self->start_param => $start + $limit - 1,                
                     $self->limit_param => $limit,                
                 );
-                return $self->_do_http_request($url);
+                return $url;
             }
         }
     } else {
