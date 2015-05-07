@@ -154,6 +154,7 @@ say STDERR $url;
         # TODO we're deserializing twice here
         # TODO yield ?
         $channel->put($data);
+        cede;
         $data = $self->deserialize($data);
         if (is_hash_ref($data)) {
             # TODO push all errors to channel
