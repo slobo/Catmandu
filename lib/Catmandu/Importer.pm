@@ -2,7 +2,7 @@ package Catmandu::Importer;
 
 use namespace::clean;
 use Catmandu::Sane;
-use Catmandu::Util qw(io is_value is_hash_ref);
+use Catmandu::Util qw(io is_value is_array_ref is_hash_ref);
 use Coro;
 use LWP::Protocol::AnyEvent::http;
 use LWP::UserAgent;
@@ -25,7 +25,6 @@ around generator => sub {
     $generator;
 };
 
-has file => (is => 'lazy');
 has fh => (is => 'lazy');
 has encoding => (is => 'lazy');
 has method => (is => 'lazy');
@@ -40,13 +39,40 @@ has paginate => (is => 'ro');
 has total_param => (is => 'ro', default => sub { 'total' });
 has limit_param => (is => 'ro', default => sub { 'limit' });
 has start_param => (is => 'ro', default => sub { 'start' });
-has url => (is => 'lazy', init_arg => undef);
+has file => (is => 'lazy', init_arg => undef);
+has url  => (is => 'lazy', init_arg => undef);
+has _file_template => (is => 'ro', predicate => 'has_file', init_arg => 'file');
 has _url_template => (is => 'ro', predicate => 'has_url', init_arg => 'url');
-has _http_client => (is => 'ro', lazy => 1, builder => '_build_http_client', init_arg => undef);
-has _channel => (is => 'ro', lazy => 1, builder => '_build_channel', init_arg => undef);
+has _http_client  => (is => 'ro', lazy => 1, builder => '_build_http_client', init_arg => undef);
+has _channel      => (is => 'ro', lazy => 1, builder => '_build_channel', init_arg => undef);
+
+sub _process_uri_template {
+    my ($self, $uri) = @_;
+    return $uri unless $self->has_variables;
+    my $template = URI::Template->new($uri);
+    my $vars = $self->variables;
+    if (is_value($vars)) {
+        $vars = [split ',', $vars];
+    }
+    if (is_array_ref($vars)) {
+        my @keys = $template->variables;
+        my @vals = @$vars;
+        $vars = {};
+        $vars->{shift @keys} = shift @vals while @keys && @vals;
+    }
+    $template->process_to_string(%$vars);
+}
 
 sub _build_file {
-    \*STDIN;
+    my ($self) = @_;
+    return \*STDIN unless $self->has_file;
+    $self->_process_uri_template($self->_file_template);
+}
+
+sub _build_url {
+    my ($self) = @_;
+    return unless $self->has_url;
+    URI->new($self->_process_uri_template($self->_url_template));
 }
 
 sub _build_headers {
@@ -61,19 +87,6 @@ sub _build_channel {
     Coro::Channel->new(1);
 }
 
-sub _build_url {
-    my ($self) = @_;
-    return unless $self->has_url;
-    my $url = $self->_url_template;
-    if ($self->has_variables) {
-        my $url_template = URI::Template->new($url);
-        my $vars = $self->variables;
-        $url_template->process(is_hash_ref($vars) ? %$vars : $vars);
-    } else {
-        URI->new($url);
-    }
-}
-
 sub _build_fh {
     my ($self) = @_;
     my $io;
@@ -81,12 +94,9 @@ sub _build_fh {
     if ($self->has_url) {
         my $channel = $self->_channel;
 
-        my $url = $self->url;
-
         async {
-            while (defined($url)) {
-                $url = $self->_do_http_request($url);
-            }
+            $self->_do_http_request;
+            $channel->shutdown;
         };
 
         $io = sub {
@@ -97,7 +107,7 @@ sub _build_fh {
     } else {
         $io = $self->file;
     }
-    
+   
     io($io, mode => 'r', binmode => $self->encoding);
 }
 
@@ -118,8 +128,8 @@ sub _build_http_client {
 
 sub _do_http_request {
     my ($self, $url) = @_;
-    #$url //= $self->url;
-say STDERR $url;
+    $url //= $self->url;
+
     my $channel = $self->_channel;
     my $request = HTTP::Request->new($self->method, $url, $self->headers);
 
@@ -157,6 +167,7 @@ say STDERR $url;
         # TODO we're deserializing twice here
         # TODO yield ?
         $channel->put($data);
+        cede;
         $data = $self->deserialize($data);
         if (is_hash_ref($data)) {
             # TODO push all errors to channel
@@ -168,7 +179,7 @@ say STDERR $url;
                     $self->start_param => $start + $limit - 1,                
                     $self->limit_param => $limit,                
                 );
-                return $url;
+                return $self->_do_http_request($url);
             }
         }
     } else {
