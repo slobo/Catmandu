@@ -352,7 +352,12 @@ sub _emit_walk_path {
         my $v = $self->generate_var;
         $perl .= "if (is_array_ref(${var})) {";
         $perl .= $self->emit_foreach($var, sub {
-            return $self->_emit_walk_path(shift, $keys, $cb);
+            $self->_emit_walk_path(shift, $keys, $cb);
+        });
+        $perl .= "} elsif (is_hash_ref(${var})) {";
+        $perl .= $self->emit_foreach_key($var, sub {
+            my $key = shift;
+            $self->_emit_walk_path("${var}->{${key}}", $keys, $cb);
         });
         $perl .= "}";
     }
@@ -406,9 +411,14 @@ sub _emit_create_path {
         my $v2 = $self->generate_var;
         $perl .= "if (is_array_ref(${var})) {";
         $perl .= "my ${v1} = ${var};";
-        $perl .= "for (my ${v2} = 0; ${v2} < \@{${v1}}; ${v2}++) {";
-        $perl .= $self->_emit_create_path("${v1}->[${v2}]", $keys, $cb);
-        $perl .= "}";
+            $perl .= "for (my ${v2} = 0; ${v2} < \@{${v1}}; ${v2}++) {";
+            $perl .= $self->_emit_create_path("${v1}->[${v2}]", $keys, $cb);
+            $perl .= "}";
+        $perl .= "} elsif (is_hash_ref(${var})) {";
+            $perl .= $self->emit_foreach_key($var, sub {
+                my $key = shift;
+                $self->_emit_create_path("${var}->{${key}}", $keys, $cb);
+            });
         $perl .= "}";
     }
     else {
@@ -417,7 +427,7 @@ sub _emit_create_path {
             $perl .= "if (is_maybe_array_ref(${var})) {";
             $perl .= "my ${v} = ${var} //= [];";
             if ($key eq '$first') {
-                    $perl .= $self->_emit_create_path("${v}->[0]", $keys, $cb);
+                $perl .= $self->_emit_create_path("${v}->[0]", $keys, $cb);
             }
             elsif ($key eq '$last') {
                 $perl .= "if (\@${v}) {";
@@ -476,9 +486,15 @@ sub emit_get_key {
     elsif ($key eq '*') {
         my $i = $self->generate_var;
         $perl .= "if (is_array_ref(${var})) {";
-        $perl .= "for (my ${i} = 0; ${i} < \@{${var}}; ${i}++) {";
-        $perl .= $cb->("${var}->[${i}]", $i);
-        $perl .= "}}";
+            $perl .= "for (my ${i} = 0; ${i} < \@{${var}}; ${i}++) {";
+            $perl .= $cb->("${var}->[${i}]", $i);
+            $perl .= "}";
+        $perl .= "} elsif (is_hash_ref(${var})) {";
+            $perl .= $self->emit_foreach_key($var, sub {
+                my $key = shift;
+                $cb->("${var}->{${key}}");
+            });
+        $perl .= "}";
     }
     else {
         $perl .= "if (is_hash_ref(${var}) && exists(${var}->{${str_key}})) {";
@@ -499,41 +515,47 @@ sub emit_set_key {
 
     if ($key =~ /^\d+$/) {
         $perl .= "if (is_hash_ref(${var})) {";
-        $perl .= "${var}->{${str_key}} = $val;";
+           $perl .= "${var}->{${str_key}} = $val;";
         $perl .= "} elsif (is_array_ref(${var})) {";
-        $perl .= "${var}->[${key}] = $val;";
+            $perl .= "${var}->[${key}] = $val;";
         $perl .= "}";
     }
     elsif ($key eq '$first') {
         $perl .= "if (is_array_ref(${var})) {";
-        $perl .= "${var}->[0] = $val;";
+           $perl .= "${var}->[0] = $val;";
         $perl .= "}";
     }
     elsif ($key eq '$last') {
         $perl .= "if (is_array_ref(${var})) {";
-        $perl .= "${var}->[\@{${var}} - 1] = $val;";
+           $perl .= "${var}->[\@{${var}} - 1] = $val;";
         $perl .= "}";
     }
     elsif ($key eq '$prepend') {
         $perl .= "if (is_array_ref(${var})) {";
-        $perl .= "unshift(\@{${var}}, $val);";
+            $perl .= "unshift(\@{${var}}, $val);";
         $perl .= "}";
     }
     elsif ($key eq '$append') {
         $perl .= "if (is_array_ref(${var})) {";
-        $perl .= "push(\@{${var}}, $val);";
+            $perl .= "push(\@{${var}}, $val);";
         $perl .= "}";
     }
     elsif ($key eq '*') {
         my $i = $self->generate_var;
         $perl .= "if (is_array_ref(${var})) {";
-        $perl .= "for (my ${i} = 0; ${i} < \@{${var}}; ${i}++) {";
-        $perl .= "${var}->[${i}] = $val;";
-        $perl .= "}}";
+            $perl .= "for (my ${i} = 0; ${i} < \@{${var}}; ${i}++) {";
+            $perl .= "${var}->[${i}] = $val;";
+            $perl .= "}";
+        $perl .= "} elsif (is_hash_ref(${var})) {";
+            $perl .= $self->emit_foreach_key($var, sub {
+                my $key = shift;
+                "${var}->{${key}} = $val;";
+            });
+        $perl .= "}";
     }
     else {
         $perl .= "if (is_hash_ref(${var})) {";
-        $perl .= "${var}->{${str_key}} = $val;";
+            $perl .= "${var}->{${str_key}} = $val;";
         $perl .= "}";
     }
 
@@ -553,31 +575,42 @@ sub emit_delete_key {
 
     if ($key =~ /^\d+$/) {
         $perl .= "if (is_hash_ref(${var}) && exists(${var}->{${str_key}})) {";
-        $perl .= "push(\@{${vals}}, "                     if $cb;
-        $perl .= "delete(${var}->{${str_key}})";
-        $perl .= ")"                                      if $cb;
-        $perl .= ";";
-        $perl .= "} elsif (is_array_ref(${var}) && \@{${var}} > ${key}) {";
-        $perl .= "push(\@{${vals}}, "                     if $cb;
-        $perl .= "splice(\@{${var}}, ${key}, 1)";
-        $perl .= ")"                                      if $cb;
+            $perl .= "push(\@{${vals}}, " if $cb;
+            $perl .= "delete(${var}->{${str_key}})";
+            $perl .= ")" if $cb;
+            $perl .= ";";
+            $perl .= "} elsif (is_array_ref(${var}) && \@{${var}} > ${key}) {";
+            $perl .= "push(\@{${vals}}, " if $cb;
+            $perl .= "splice(\@{${var}}, ${key}, 1)";
+            $perl .= ")" if $cb;
+            $perl .= ";";
+        $perl .= "}";
     }
     elsif ($key eq '$first' || $key eq '$last' || $key eq '*') {
         $perl .= "if (is_array_ref(${var}) && \@{${var}}) {";
-        $perl .= "push(\@{${vals}}, "                     if $cb;
-        $perl .= "splice(\@{${var}}, 0, 1)"               if $key eq '$first';
-        $perl .= "splice(\@{${var}}, \@{${var}} - 1, 1)"  if $key eq '$last';
-        $perl .= "splice(\@{${var}}, 0, \@{${var}})"      if $key eq '*';
-        $perl .= ")"                                      if $cb;
+            $perl .= "push(\@{${vals}}, " if $cb;
+            $perl .= "splice(\@{${var}}, 0, 1)" if $key eq '$first';
+            $perl .= "splice(\@{${var}}, \@{${var}} - 1, 1)" if $key eq '$last';
+            $perl .= "splice(\@{${var}}, 0, \@{${var}})" if $key eq '*';
+            $perl .= ")" if $cb;
+            $perl .= ";";
+        if ($key eq '*') {
+            $perl .= "} elsif (is_hash_ref(${var})) {";
+                $perl .= $self->emit_foreach_key($var, sub {
+                    my $key = shift;
+                    "delete(${var}->{${key}});";
+                });
+        }
+        $perl .= "}";
     }
     else {
         $perl .= "if (is_hash_ref(${var}) && exists(${var}->{${str_key}})) {";
-        $perl .= "push(\@{${vals}}, "                    if $cb;
-        $perl .= "delete(${var}->{${str_key}})";
-        $perl .= ")"                                     if $cb;
+            $perl .= "push(\@{${vals}}, " if $cb;
+            $perl .= "delete(${var}->{${str_key}})";
+            $perl .= ")" if $cb;
+            $perl .= ";";
+        $perl .= "}";
     }
-    $perl .= ";";
-    $perl .= "}";
     if ($cb) {
         $perl .= $cb->($vals);
     }
@@ -624,7 +657,7 @@ sub emit_retain_key {
         $perl .= $self->emit_foreach_key($var, sub {
             my $v = shift;
             "if ($v ne ${key}) {".
-            "delete(${var}->{${v}});".
+                "delete(${var}->{${v}});".
             "}";
         });
         $perl .= "}";

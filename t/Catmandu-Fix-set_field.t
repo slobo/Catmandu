@@ -32,8 +32,13 @@ is_deeply
     "only set field if the path matches";
 
 is_deeply
-    $pkg->new('test', '0123')->fix({test => 'ok'}),
-    {test => '0123'},
+    $pkg->new('test', 1)->fix({test => 'not ok'}),
+    {test => 1},
     "set a number";
 
-done_testing 6;
+is_deeply
+    $pkg->new('*', 'ok')->fix({test1 => 'not ok', test2 => 'not ok'}),
+    {test1 => 'ok', test2 => 'ok'},
+    "set hash wildcard values at root";
+
+done_testing;

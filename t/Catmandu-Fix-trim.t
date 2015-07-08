@@ -36,10 +36,21 @@ is_deeply
     {name => "宮川"},
     "trim utf8 string";
 
+# TODO these are more a test of path matching than of trim
 is_deeply
     $pkg->new('names.*.name')->fix({names => [{name => "\tjoe  "}, {name => "  rick  "}]}),
     {names => [{name => "joe"}, {name => "rick"}]},
-    "trim wildcard values";
+    "trim wildcard array values";
 
-done_testing 7;
+is_deeply
+    $pkg->new('names.*')->fix({names => {joe => "\tjoe  ", rick => "  rick  "}}),
+    {names => {joe => "joe", rick => "rick"}},
+    "trim wildcard hash values";
+
+is_deeply
+    $pkg->new('*')->fix({joe => "\tjoe  ", rick => "  rick  "}),
+    {joe => "joe", rick => "rick"},
+    "trim wildcard hash values at root";
+
+done_testing;
 

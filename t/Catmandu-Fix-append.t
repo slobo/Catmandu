@@ -21,4 +21,9 @@ is_deeply
     {names => [{name => 'joey'}, {name => 'ricky'}]},
     "append to wildcard values";
 
-done_testing 3;
+is_deeply
+    $pkg->new('*', 'y')->fix({joe => 'joe', rick => 'rick'}),
+    {joe => 'joey', rick => 'ricky'},
+    "append to hash wildcard values at root";
+
+done_testing;
