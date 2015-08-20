@@ -47,12 +47,12 @@ sub emit {
     "}";
 
     $perl .= "while (\@{${keys_var}} && \@{${vals_var}}) {" .
-        "${key_var} = shift(\@{${keys_var}});";
-        "${val_var} = shift(\@{${vals_var}});";
+        "my ${key_var} = shift(\@{${keys_var}});" .
+        "my ${val_var} = shift(\@{${vals_var}});" .
         "if (is_positive(${val_var})) {" .
             "${memo_var}\->{${key_var}} += ${val_var};" .
         "}" .
-    "}" .
+    "}";
 
     $perl;
 }
@@ -61,11 +61,10 @@ sub generator {
     my ($self) = @_;
     my $memo = $self->memo;
     sub {
-        state @keys = keys @memo;
-        return unless @keys;
-        my $key = shift(@keys) // return; 
+        state $keys = [keys %$memo];
+        my $key = shift(@$keys) // return; 
         my $val = $memo->{$key}; 
-        {$key => $val};
+        +{$key => $val};
     }    
 }
 

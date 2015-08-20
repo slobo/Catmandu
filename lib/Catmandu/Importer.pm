@@ -13,22 +13,22 @@ has data_path => (is => 'ro');
 
 around generator => sub {
     my ($orig, $self) = @_;
-    my $generator = $orig->($self);
-
-    if (my $fixer = $self->_fixer) {
-        $generator = $fixer->fix($generator);
-    }
+    my $generator = my $gen = $orig->($self);
 
     if (defined(my $path = $self->data_path)) {
-        return sub {
+        $generator = sub {
             state @buf;
             while (1) {
                 return shift @buf if @buf;
                 # TODO use something faster than data_at
-                @buf = data_at($path, $generator->() // return);
+                @buf = data_at($path, $gen->() // return);
                 next;        
             }
         };    
+    }
+
+    if (my $fixer = $self->_fixer) {
+        $generator = $fixer->fix($generator);
     }
 
     $generator;

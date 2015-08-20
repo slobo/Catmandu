@@ -12,6 +12,7 @@ sub _eval_emit {
 
 use Moo;
 use Catmandu::Fix::Parser;
+use Catmandu::MultiIterator;
 use Data::Dumper ();
 use B ();
 
@@ -82,8 +83,44 @@ sub _build_current_fix_var {
     $self->generate_var;
 }
 
+sub _get_reducers {
+    my ($memo, $fixes) = @_;
+    for (@$fixes) {
+        push @$memo, $_ if $_->can('generator');
+        _get_reducers($memo, $_->pass_fixes) if $_->can('pass_fixes');
+        _get_reducers($memo, $_->fail_fixes) if $_->can('fail_fixes');
+    }
+    $memo;
+}
+
+sub _reduce {
+    my ($self, $data, $reducers) = @_;
+
+    my $fixer = $self->fixer;
+    my $reduced = Catmandu::MultiIterator->new($reducers);
+
+    if (is_instance($data)) {
+        $data->each(sub { $fixer->($_[0]) });
+        return $reduced;
+    } elsif (is_code_ref($data)) {
+        while (1) {
+            $fixer->($data->() // last);
+        }
+        return $reduced->generator;
+    } elsif (is_array_ref($data)) {
+        $fixer->($_) for @$data;
+        return $reduced->to_array;
+    } else {
+        Catmandu::BadArg->throw("must be arrayref, coderef or iterable object");
+    }
+}
+
 sub fix {
     my ($self, $data) = @_;
+    my $reducers = _get_reducers([], $self->fixes);
+
+    return $self->_reduce($data, $reducers) if @$reducers;
+
     my $fixer = $self->fixer;
 
     if (is_hash_ref($data)) {
@@ -112,39 +149,6 @@ sub fix {
     }
 
     Catmandu::BadArg->throw("must be hashref, arrayref, coderef or iterable object");
-}
-
-sub _get_reducers {
-    my ($memo, $fixes) = @_;
-    for (@$fixes) {
-        push @$memo, $_ if $_->can('generator');
-        _get_reducers($memo, $fix->pass_fixes) if $fix->can('pass_fixes');
-        _get_reducers($memo, $fix->fail_fixes) if $fix->can('fail_fixes');
-    }
-    $memo;
-}
-
-sub reduce {
-    my ($self, $data) = @_;
-    my $fixer = $self->fixer;
-
-    my $reducers = _get_reducers([], $self->fixes);
-    my $reduced = Catmandu::MultiIterator->new($reducers);
-
-    if (is_instance($data)) {
-        $data->each(sub { $fixer->($_[0]) });
-        return $reduced;
-    } elsif (is_code_ref($data)) {
-        while (1) {
-            $fixer->($data->() // last);
-        }
-        return $reduced->generator;
-    } elsif (is_array_ref($data)) {
-        $fixer->($_) for @$data;
-        return $reduced->to_array;
-    } else {
-        Catmandu::BadArg->throw("must be hashref, arrayref, coderef or iterable object");
-    }
 }
 
 sub generate_var {
